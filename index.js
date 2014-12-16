@@ -1,11 +1,23 @@
 var fs = require('fs');
 var path = require('path');
 var unzip = require('unzip-maxired');
+var util = require('util');
 
+
+var FSEntry = function(){
+
+}
+FSEntry.prototype.mtime = new Date();
+FSEntry.prototype.atime = new Date();
+FSEntry.prototype.ctime = new Date();
+FSEntry.prototype.ino = 0;
 
 var Directory = function(entry) {
+	FSEntry.call(this);
 	this.size = entry.size;
 };
+util.inherits(Directory, FSEntry); 
+
 Directory.prototype.isDirectory = function() {
 	return true;
 };
@@ -15,10 +27,13 @@ Directory.prototype.isFile = function() {
 };
 
 var File = function(entry) {
+	FSEntry.call(this);
 	this.size = entry.size;
 	this.entry = entry;
 	this.pipe = entry.pipe.bind(entry);
 };
+util.inherits(File, FSEntry); 
+
 File.prototype.isDirectory = function() {
 	return false;
 };
@@ -177,25 +192,45 @@ var stat = function(path, cb) {
 };
 
 
-var Readable = require('stream').Readable;
+var Duplex = require('stream').Duplex;
+var util = require('util');
+
+util.inherits(ZipStream, Duplex);
+
+function ZipStream(opt) {
+	Duplex.call(this, opt);
+	this.data = '';
+}
+
+ZipStream.prototype._write = function(chunk, encoding, callback){
+	this.data = chunk.toString();;
+	callback(null);
+	this.read(0);
+};
+
+ZipStream.prototype._read = function(n) {
+	if(this.data.length == 0 ){ return this.push(''); }
+	this.push(this.data);
+	this.data='';
+};
+/*
+ZipStream.prototype.pipe = function(dst){
+	console.log("pipe")
+	this._dst = dst;
+}*/
 
 var createReadStream = function(path, option) {
-	var toReturn = new Readable(option);
-	toReturn.end = function() {};
-	toReturn.write = function(i) {
-		toReturn.emit('data', i)
-	};
-	toReturn._read = function() {
-		return null
-	};
+	var buffer;
+	var toReturn = new ZipStream(option);
+
 	fs.stat(path, function(err, _stat) {
 		if (_stat) {
 			return fs.createReadStream(path, option).pipe(toReturn);
-		}else{
-			return _findEntry(path, function(err, _stat){
-				if(!err){
+		} else {
+			return _findEntry(path, function(err, _stat) {
+				if (!err) {
 					_stat.pipe(toReturn);
-				}else{
+				} else {
 					toReturn.emit('error', err);
 				}
 			})

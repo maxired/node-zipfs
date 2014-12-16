@@ -140,7 +140,7 @@ var _findEntryInZip = function(fileStream, tree, cb) {
 
 			} else {
 				cb({
-					code: 'ENOTFOUND',
+					code: 'ENOENT',
 					file: path.join(tree.path, tree.inzip)
 				});
 			}

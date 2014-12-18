@@ -211,6 +211,7 @@ var stat = function(path, cb) {
 var RangedStream = require('ranged-stream');
 
 var createReadStream = function(path, option) {
+        option = option || {};
 	var buffer;
 	var toReturn = new RangedStream(option);
 

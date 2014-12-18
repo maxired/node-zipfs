@@ -16,7 +16,7 @@ var Directory = function(entry) {
 	FSEntry.call(this);
 	this.size = entry.size;
 };
-util.inherits(Directory, FSEntry); 
+util.inherits(Directory, FSEntry);
 
 Directory.prototype.isDirectory = function() {
 	return true;
@@ -32,7 +32,7 @@ var File = function(entry) {
 	this.entry = entry;
 	this.pipe = entry.pipe.bind(entry);
 };
-util.inherits(File, FSEntry); 
+util.inherits(File, FSEntry);
 
 File.prototype.isDirectory = function() {
 	return false;
@@ -69,6 +69,9 @@ var _findRootZip = function(tree, cb) {
 		if (stat.isFile()) {
 			//we math a file
 			cb(null, tree);
+		}else{
+			// probably the origin path was zip with trailing /
+			cb({code: 'ENOTDIR' });
 		}
 	})
 
@@ -146,6 +149,16 @@ var _findEntryInZip = function(fileStream, tree, cb) {
 			}
 		}
 
+	}).on('error', function(err){
+		if(err && err.message && err.message.indexOf("invalid signature:")==0){
+			//we try to unzip something while is not a zip
+			// it would have been handle somewhere else if it was a directory, so it is a file
+			// whe shoudl throw ENOTDIR
+			cb({code : "ENOTDIR", file : tree.path});
+		}
+		else{
+			cb(err)
+		}
 	})
 };
 
@@ -160,6 +173,9 @@ var _findEntry = function(path, cb) {
 		} else {
 			// we should start to look inside zip in there is what we want
 			_findEntryInZip(fs.createReadStream(tree.path), tree, function(err, entry) {
+				if (err) {
+					return cb(err);
+				}
 				if (entry.type == "Directory") {
 					return cb(err, new Directory(entry));
 				} else if (entry.type == "File") {
@@ -192,36 +208,11 @@ var stat = function(path, cb) {
 };
 
 
-var Duplex = require('stream').Duplex;
-var util = require('util');
-
-util.inherits(ZipStream, Duplex);
-
-function ZipStream(opt) {
-	Duplex.call(this, opt);
-	this.data = '';
-}
-
-ZipStream.prototype._write = function(chunk, encoding, callback){
-	this.data = chunk.toString();;
-	callback(null);
-	this.read(0);
-};
-
-ZipStream.prototype._read = function(n) {
-	if(this.data.length == 0 ){ return this.push(''); }
-	this.push(this.data);
-	this.data='';
-};
-/*
-ZipStream.prototype.pipe = function(dst){
-	console.log("pipe")
-	this._dst = dst;
-}*/
+var RangedStream = require('ranged-stream');
 
 var createReadStream = function(path, option) {
 	var buffer;
-	var toReturn = new ZipStream(option);
+	var toReturn = new RangedStream(option);
 
 	fs.stat(path, function(err, _stat) {
 		if (_stat) {
@@ -236,6 +227,10 @@ var createReadStream = function(path, option) {
 			})
 		}
 	});
+	toReturn.on('error', function(err) {
+		console.log("####################I got an erro", err);
+	})
+
 	return toReturn;
 }
 
